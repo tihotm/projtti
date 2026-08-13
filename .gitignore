@@ -1,0 +1,11 @@
+# Local runtime artifacts
+.runtime/
+
+# Cloned upstream projects used only as references/audit inputs
+references/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
