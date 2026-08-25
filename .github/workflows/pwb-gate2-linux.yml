@@ -1,0 +1,224 @@
+name: PropertyWebBuilder Gate 2 Linux
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pwb-gate2-linux.yml'
+      - 'scripts/pwb_gate2.sh'
+      - 'scripts/pwb_gate2_smoke.js'
+      - 'docs/PWB_GATE2_HOSTED_LINUX.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate2:
+    name: Frozen candidate runtime and baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      REDIS_URL: redis://localhost:6379/0
+      DISABLE_SPRING: '1'
+      PWB_SHA: d3b4c2786f6f967ca3cf8a63f95ba38fa6ea4e79
+      PWB_DIR: ${{ github.workspace }}/property_web_builder
+      PWB_SMOKE_LEAD_EMAIL: gate2-smoke@example.com
+
+    steps:
+      - name: Checkout projtti gate tooling
+        uses: actions/checkout@v4
+
+      - name: Checkout frozen PropertyWebBuilder candidate
+        uses: actions/checkout@v4
+        with:
+          repository: etewiah/property_web_builder
+          ref: d3b4c2786f6f967ca3cf8a63f95ba38fa6ea4e79
+          path: property_web_builder
+          fetch-depth: 1
+
+      - name: Install Linux prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip postgresql-client
+          command -v unzip
+          unzip -v | head -n 2
+
+      - name: Set up Ruby 3.4.7
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4.7'
+          bundler-cache: false
+
+      - name: Install exact Bundler
+        run: |
+          gem install bundler -v 2.6.9 --no-document
+          bundle _2.6.9_ --version
+
+      - name: Set up Node 22.18.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+
+      - name: Verify frozen candidate invariant
+        working-directory: property_web_builder
+        run: |
+          test "$(git rev-parse HEAD)" = "$PWB_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          echo "CANDIDATE_SHA=$PWB_SHA STATUS=PASS"
+
+      - name: Run Gate 2 preflight
+        run: bash scripts/pwb_gate2.sh "$PWB_DIR" --preflight
+
+      - name: Run audited setup and RSpec
+        run: bash scripts/pwb_gate2.sh "$PWB_DIR"
+
+      - name: Install Playwright Chromium
+        working-directory: property_web_builder
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare E2E database and assets
+        working-directory: property_web_builder
+        env:
+          RAILS_ENV: e2e
+          SECRET_KEY_BASE: gate2_ci_only_secret_key_base
+        run: |
+          bin/rails db:prepare
+          bin/rails db:seed
+          npm run tailwind:build
+          bundle exec rake assets:precompile
+
+      - name: Create smoke upload fixture
+        run: |
+          python3 - <<'PY'
+          import base64
+          from pathlib import Path
+          png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
+          Path('/tmp/gate2-smoke.png').write_bytes(png)
+          PY
+
+      - name: Start E2E server with admin auth bypass for functional smoke
+        working-directory: property_web_builder
+        env:
+          RAILS_ENV: e2e
+          BYPASS_ADMIN_AUTH: 'true'
+        run: |
+          bundle exec rails server -b 0.0.0.0 -p 3001 > /tmp/pwb-e2e-bypass.log 2>&1 &
+          echo $! > /tmp/pwb-e2e-bypass.pid
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://tenant-a.e2e.localhost:3001/_test/health >/dev/null; then
+              echo "E2E_BYPASS_SERVER=READY"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/pwb-e2e-bypass.log
+          exit 1
+
+      - name: Run upstream public/search/tenant regression
+        working-directory: property_web_builder
+        env:
+          RAILS_ENV: e2e
+          BYPASS_ADMIN_AUTH: 'true'
+        run: |
+          npx playwright test \
+            tests/e2e/public/property-search.spec.js \
+            tests/e2e/public/property-details.spec.js \
+            tests/e2e/auth/tenant-isolation.spec.js \
+            --project=chromium
+          echo "SMOKE3_CATALOG=PASS"
+          echo "SMOKE3_SEARCH_FILTER=PASS"
+          echo "SMOKE3_PROPERTY_PAGE=PASS"
+          echo "SMOKE3_TENANT_ISOLATION=PASS"
+
+      - name: Run targeted functional smoke
+        env:
+          NODE_PATH: ${{ github.workspace }}/property_web_builder/node_modules
+          PWB_SMOKE_MODE: functional
+          PWB_BASE_URL: http://tenant-a.e2e.localhost:3001
+          PWB_SMOKE_IMAGE: /tmp/gate2-smoke.png
+        run: node scripts/pwb_gate2_smoke.js
+
+      - name: Verify lead intake persistence
+        working-directory: property_web_builder
+        env:
+          RAILS_ENV: e2e
+        run: |
+          bundle exec rails runner 'email = ENV.fetch("PWB_SMOKE_LEAD_EMAIL"); abort("lead/message not persisted for #{email}") unless Pwb::Message.exists?(origin_email: email)'
+          echo "SMOKE3_LEAD_INTAKE=PASS"
+
+      - name: Stop bypass server
+        if: always()
+        run: |
+          if test -f /tmp/pwb-e2e-bypass.pid; then kill "$(cat /tmp/pwb-e2e-bypass.pid)" 2>/dev/null || true; fi
+
+      - name: Start E2E server with real authentication
+        working-directory: property_web_builder
+        env:
+          RAILS_ENV: e2e
+        run: |
+          env -u BYPASS_ADMIN_AUTH bundle exec rails server -b 0.0.0.0 -p 3002 > /tmp/pwb-e2e-auth.log 2>&1 &
+          echo $! > /tmp/pwb-e2e-auth.pid
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://tenant-a.e2e.localhost:3002/_test/health >/dev/null; then
+              echo "E2E_AUTH_SERVER=READY"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/pwb-e2e-auth.log
+          exit 1
+
+      - name: Run real authentication and role-boundary smoke
+        env:
+          NODE_PATH: ${{ github.workspace }}/property_web_builder/node_modules
+          PWB_SMOKE_MODE: auth
+          PWB_AUTH_BASE_URL: http://tenant-a.e2e.localhost:3002
+        run: node scripts/pwb_gate2_smoke.js
+
+      - name: Final baseline classification
+        run: |
+          echo "SMOKE3_REQUIRED=12"
+          echo "SMOKE3_RESULT=PASS"
+          echo "BASE_OPERACIONAL_MINIMA=PASS"
+          echo "GATE2_HOSTED_LINUX=PASS"
+          echo "GATE2_FINAL=HOSTED_LINUX_PASS_LOCAL_WSL_CONFIRMATION_SEPARATE"
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwb-gate2-linux-logs
+          path: |
+            /tmp/pwb-e2e-bypass.log
+            /tmp/pwb-e2e-auth.log
+            property_web_builder/playwright-report/
+          if-no-files-found: ignore
