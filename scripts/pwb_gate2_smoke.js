@@ -148,7 +148,7 @@ async function runFunctional() {
     } catch (e) { fail('MEDIA_UPLOAD', e); throw e; }
 
     try {
-      const contact = await page.goto(`${functionalBase}/en/contact-us`, { waitUntil: 'domcontentloaded' });
+      const contact = await page.goto(`${functionalBase}/contact-us`, { waitUntil: 'domcontentloaded' });
       await assertOk(contact, 'contact page');
       const name = page.locator('input[id="contact_name"], input[name*="name"]').first();
       if (await name.count()) await name.fill('Gate Two Smoke');
