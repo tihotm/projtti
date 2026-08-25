@@ -9,7 +9,7 @@ MODE="run"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/pwb_gate2.sh <property_web_builder_dir> [--preflight]
+  bash scripts/pwb_gate2.sh <property_web_builder_dir> [--preflight]
 
 Modes:
   default       Validate preconditions, then run the audited setup/test sequence.
