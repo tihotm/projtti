@@ -14,7 +14,19 @@ The harness accepts only:
 d3b4c2786f6f967ca3cf8a63f95ba38fa6ea4e79
 ```
 
-Any other checkout SHA fails closed.
+Any other checkout SHA fails closed as an invariant violation.
+
+## Classification contract
+
+The harness deliberately separates evidence classes so that a setup command failure is never promoted automatically to a functional failure:
+
+```text
+BLOCKED_ENVIRONMENT              known missing/invalid environment prerequisite
+FAIL_INVARIANT                   wrong candidate, invalid checkout or dirty tracked upstream worktree
+EXECUTION_FAILED_UNCLASSIFIED    bundle/npm/db/test command failed; evidence must be inspected before deciding environment vs functional failure
+```
+
+`EXECUTION_FAILED_UNCLASSIFIED` always emits `GATE2_FINAL=NOT_EVALUATED`. The final Issue #2 classification remains `PASS`, functional/architectural `FAIL`, or `BLOCKED` only after the failure evidence and runtime/smoke results justify it.
 
 ## Preflight only
 
@@ -41,7 +53,7 @@ Missing environmental prerequisites return:
 GATE2_CLASSIFICATION=BLOCKED_ENVIRONMENT
 ```
 
-Candidate mismatch or a dirty tracked worktree returns `FAIL` rather than being treated as an environment block.
+Candidate mismatch or a dirty tracked worktree returns `FAIL_INVARIANT`; neither is presented as a product/runtime failure.
 
 ## Setup/test phase
 
@@ -66,7 +78,7 @@ Seed remains opt-in because the prior audit says to run it when required:
 PWB_RUN_SEED=1 bash scripts/pwb_gate2.sh ~/Projetos/plataforma-imobiliaria/property_web_builder_gate2_clean
 ```
 
-After every mutating/setup step, the harness checks that no tracked upstream file changed.
+After every successful mutating/setup step, the harness checks that no tracked upstream file changed. If a setup/test command exits nonzero, the harness records the command and exit code as `EXECUTION_FAILED_UNCLASSIFIED` and stops for evidence review rather than guessing the cause.
 
 ## Explicitly forbidden shortcuts
 
@@ -76,9 +88,10 @@ The harness does not:
 - use `PUPPETEER_SKIP_DOWNLOAD`;
 - edit `Gemfile`, lockfiles, initializers, migrations, models, controllers or views;
 - promote PropertyWebBuilder to official base;
+- classify a setup/test command failure as functional without evidence;
 - claim the complete Gate 2 passed after RSpec alone.
 
-## Final acceptance remains manual/runtime-aware
+## Final acceptance remains runtime-aware
 
 A successful harness run ends with:
 
@@ -87,4 +100,4 @@ GATE2_HARNESS_PHASE=SETUP_AND_TEST_PASS
 GATE2_FINAL=NOT_EVALUATED
 ```
 
-The complete #2 decision still requires `bin/dev` plus the public/admin smoke suite defined in #3. Only after those executable checks may #2 be classified as final `PASS`, `FAIL` or `BLOCKED` and #5 proceed.
+The complete #2 decision still requires `bin/dev` plus the public/admin smoke suite defined in #3. Only after those executable checks may #2 be classified as final `PASS`, functional/architectural `FAIL`, or `BLOCKED` and #5 proceed.
