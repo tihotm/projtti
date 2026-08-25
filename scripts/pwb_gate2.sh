@@ -30,9 +30,16 @@ blocked() {
   exit 2
 }
 
-failed() {
-  say "GATE2_CLASSIFICATION=FAIL"
+invariant_failed() {
+  say "GATE2_CLASSIFICATION=FAIL_INVARIANT"
   say "GATE2_REASON=$*"
+  exit 1
+}
+
+execution_failed() {
+  say "GATE2_CLASSIFICATION=EXECUTION_FAILED_UNCLASSIFIED"
+  say "GATE2_REASON=$*"
+  say "GATE2_FINAL=NOT_EVALUATED"
   exit 1
 }
 
@@ -43,10 +50,10 @@ require_command() {
 
 assert_tracked_clean() {
   local tracked_status
-  tracked_status="$(git status --porcelain --untracked-files=no)" || failed "unable to read git status"
+  tracked_status="$(git status --porcelain --untracked-files=no)" || invariant_failed "unable to read git status"
   if [[ -n "$tracked_status" ]]; then
     say "$tracked_status"
-    failed "tracked upstream worktree is not clean"
+    invariant_failed "tracked upstream worktree is not clean"
   fi
 }
 
@@ -57,8 +64,8 @@ run_step() {
   "$@"
   local rc=$?
   if [[ $rc -ne 0 ]]; then
-    say "STEP=${name} STATUS=FAIL EXIT_CODE=${rc}"
-    failed "step ${name} failed with exit code ${rc}"
+    say "STEP=${name} STATUS=FAILED_UNCLASSIFIED EXIT_CODE=${rc}"
+    execution_failed "step ${name} failed with exit code ${rc}; inspect evidence before classifying environment vs functional failure"
   fi
   assert_tracked_clean
   say "STEP=${name} STATUS=PASS"
@@ -78,14 +85,14 @@ if [[ $# -eq 2 ]]; then
   MODE="preflight"
 fi
 
-[[ -d "$PWB_DIR" ]] || failed "checkout directory does not exist: ${PWB_DIR}"
-cd "$PWB_DIR" || failed "cannot enter checkout directory: ${PWB_DIR}"
+[[ -d "$PWB_DIR" ]] || invariant_failed "checkout directory does not exist: ${PWB_DIR}"
+cd "$PWB_DIR" || invariant_failed "cannot enter checkout directory: ${PWB_DIR}"
 
 require_command git
 
-ACTUAL_SHA="$(git rev-parse HEAD 2>/dev/null)" || failed "not a readable git checkout"
+ACTUAL_SHA="$(git rev-parse HEAD 2>/dev/null)" || invariant_failed "not a readable git checkout"
 if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
-  failed "unexpected candidate SHA: expected ${EXPECTED_SHA}, got ${ACTUAL_SHA}"
+  invariant_failed "unexpected candidate SHA: expected ${EXPECTED_SHA}, got ${ACTUAL_SHA}"
 fi
 say "CANDIDATE_SHA=${ACTUAL_SHA} STATUS=PASS"
 
