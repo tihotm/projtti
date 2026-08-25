@@ -21,7 +21,7 @@ Any other checkout SHA fails closed.
 Use this first after installing the missing WSL prerequisite:
 
 ```bash
-./scripts/pwb_gate2.sh ~/Projetos/plataforma-imobiliaria/property_web_builder_gate2_clean --preflight
+bash scripts/pwb_gate2.sh ~/Projetos/plataforma-imobiliaria/property_web_builder_gate2_clean --preflight
 ```
 
 The preflight checks:
@@ -48,7 +48,7 @@ Candidate mismatch or a dirty tracked worktree returns `FAIL` rather than being 
 After preflight passes:
 
 ```bash
-./scripts/pwb_gate2.sh ~/Projetos/plataforma-imobiliaria/property_web_builder_gate2_clean
+bash scripts/pwb_gate2.sh ~/Projetos/plataforma-imobiliaria/property_web_builder_gate2_clean
 ```
 
 The harness executes the sequence already recorded in `audits/PROPERTYWEBBUILDER_GATE_2_WSL_LINUX.md`:
@@ -63,7 +63,7 @@ bundle exec rspec
 Seed remains opt-in because the prior audit says to run it when required:
 
 ```bash
-PWB_RUN_SEED=1 ./scripts/pwb_gate2.sh ~/Projetos/plataforma-imobiliaria/property_web_builder_gate2_clean
+PWB_RUN_SEED=1 bash scripts/pwb_gate2.sh ~/Projetos/plataforma-imobiliaria/property_web_builder_gate2_clean
 ```
 
 After every mutating/setup step, the harness checks that no tracked upstream file changed.
