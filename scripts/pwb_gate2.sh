@@ -110,9 +110,15 @@ ACTUAL_BUNDLER="$(bundle --version | awk '{print $3}')" || blocked "unable to re
 say "BUNDLER_VERSION=${ACTUAL_BUNDLER} STATUS=PASS"
 
 require_command node
-ACTUAL_NODE="$(node -p 'process.versions.node')" || blocked "unable to read Node.js version"
-node -e 'const [maj,min]=process.versions.node.split(".").map(Number); process.exit(maj === 22 && min >= 18 ? 0 : 1)' \
-  || blocked "Node.js must satisfy >=22.18.0 <23; found ${ACTUAL_NODE}"
+# ⚡ Bolt Optimization: Use bash parameter expansion to avoid spinning up V8 twice
+raw_node_v="$(node -v)" || blocked "unable to read Node.js version"
+ACTUAL_NODE="${raw_node_v#v}"
+maj="${ACTUAL_NODE%%.*}"
+min_patch="${ACTUAL_NODE#*.}"
+min="${min_patch%%.*}"
+if [[ "$maj" -ne 22 || "$min" -lt 18 ]]; then
+  blocked "Node.js must satisfy >=22.18.0 <23; found ${ACTUAL_NODE}"
+fi
 say "NODE_VERSION=${ACTUAL_NODE} STATUS=PASS"
 
 require_command npm
