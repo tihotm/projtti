@@ -1,0 +1,4 @@
+## 2026-09-16 - Missing Security Disclosure Policy in Base Repo
+**Vulnerability:** The repository `plataforma-imobiliaria` is an architectural baseline/documentation repository but lacked a formal `SECURITY.md` file or vulnerability disclosure policy.
+**Learning:** Even repositories containing only documentation, audits, or architectural decisions require a clear security policy. Without it, external researchers or users finding conceptual flaws in the architecture have no established, secure channel to report them, potentially leading to public disclosure of architectural vulnerabilities.
+**Prevention:** Always initialize all repositories, including documentation and architectural ones, with a standard `SECURITY.md` file containing a clear responsible disclosure policy and a security contact.
