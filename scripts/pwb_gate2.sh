@@ -111,8 +111,11 @@ say "BUNDLER_VERSION=${ACTUAL_BUNDLER} STATUS=PASS"
 
 require_command node
 ACTUAL_NODE="$(node -p 'process.versions.node')" || blocked "unable to read Node.js version"
-node -e 'const [maj,min]=process.versions.node.split(".").map(Number); process.exit(maj === 22 && min >= 18 ? 0 : 1)' \
-  || blocked "Node.js must satisfy >=22.18.0 <23; found ${ACTUAL_NODE}"
+# ⚡ Bolt optimization: Avoid second Node.js spawn by doing the version check in pure Bash
+IFS='.' read -r -a node_v <<< "$ACTUAL_NODE"
+if [[ ${node_v[0]} -ne 22 || ${node_v[1]} -lt 18 ]]; then
+  blocked "Node.js must satisfy >=22.18.0 <23; found ${ACTUAL_NODE}"
+fi
 say "NODE_VERSION=${ACTUAL_NODE} STATUS=PASS"
 
 require_command npm
