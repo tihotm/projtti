@@ -1,0 +1,4 @@
+## 2024-09-30 - Added Responsible Disclosure Policy
+**Vulnerability:** Missing responsible disclosure policy (`SECURITY.md`) in the repository. Without it, researchers may not know how or where to securely report vulnerabilities, potentially leading to public disclosure.
+**Learning:** Even repositories focused purely on documentation, audits, or architecture need a security policy and a clear point of contact to ensure that any potential future code or current structural issues are reported securely to the correct maintainer.
+**Prevention:** Always initialize projects (even those currently lacking application code) with a `SECURITY.md` file that specifies a contact method for reporting vulnerabilities.
